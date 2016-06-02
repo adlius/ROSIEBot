@@ -1,136 +1,167 @@
-## Python 3.5 required for requests library
-
-## End variable URLS with trailing slash
-
 import requests
 from bs4 import BeautifulSoup
+import datetime
+import os
 
-# For development, API access is localhost:8000 by default and HTTP access is localhost:5000
-base_urls = ['https://osf.io/', 'https://api.osf.io/v2/']
-# base_urls = ['http://localhost:5000/', 'http://localhost:8000/v2/']
-
-
-#TODO: Command line interface
 #TODO: Change user agent to RosieBot
+#TODO: Documentation
 #TODO: AJAX
 #TODO: Directories
-#TODO: Static content
 
-class Crawler():
-    '''
-    Crawlers keep one node_list of all of the URL tails and GUIDs they encounter, which the scraper will go through to save pages.
-    For API searches, a limit parameter is necessary for testing.
+class Crawler:
+    def __init__(self, base_url):
 
-    URL tails:
-    - Homepage content
-    - Homepage links
-
-    API searches:
-    - Nodes
-    - Users
-    - Institutions
-
-    The Crawler.crawl() function calls all of these piece crawls.
-
-    '''
-    def __init__(self):
-        global base_urls
-        self.url_list = []
+        # header specifies user-agent to trigger prerender
         self.headers = {
-            'User-Agent' : 'LinkedInBot/1.0 (compatible; Mozilla/5.0; Jakarta Commons-HttpClient/3.1 +http://www.linkedin.com)'
-            # 'User-Agent' : 'ROSIEBot/1.0 (+http://github.com/zamattiac/ROSIEBot)'
+            # 'User-Agent' : 'ROSIEBot'
+            'User-Agent': 'LinkedInBot/1.0 (compatible; Mozilla/5.0; Jakarta Commons-HttpClient/3.1 +http://www.linkedin.com)'
         }
-        self.node_list = []
-        self.http_base = base_urls[0]
-        self.api_base = base_urls[1]
 
-    # Accesses complete list of nodes from API and appends list of GUIds
-    def crawl_nodes(self, limit=0):
-        print("Crawling Nodes API")
+        # base_url: the root url of the website that will be browsed (localhost, osf.io, etc)
+        self.base_url = base_url
+
+    # crawl_api: tells the Crawler to return a list of all public nodes on from API
+    # limit: when 0, is not applied. when > 0, chooses how many pages of nodes are gathered.
+    # if limit != 0, # of nodes = limit * 10
+    def crawl_api(self, limit=0):
+
+        # open a new request session
         with requests.Session() as s:
-            cur_url = self.api_base + 'nodes/'
+
+            # modify the URL so it works with the API
+            split_url = self.base_url.split("//")
+            cur_url = split_url[0] + "//api." + split_url[1] + "/v2/nodes/"  # page included for debugging
+
+            # keeps track of how many pages have been accessed
             ctr = 1
 
+            # nodelist: the list of nodes to be returned
+            nodelist = []
             while True:
                 current_page = s.get(cur_url)
+                print('page -> ' + cur_url)
                 parsed_json = current_page.json()
                 for x in range(0, len(parsed_json['data'])):
                     if parsed_json['data'][x]['attributes']['public']:
-                        self.node_list.append(str(parsed_json['data'][x]['id']))
-
-                cur_url = parsed_json['links']['next']
-
+                        nodelist.append(str(parsed_json['data'][x]['id']))
                 if parsed_json['links']['next'] == parsed_json['links']['last']:
+                    print("end of nodes on OSF!")
                     break
+                cur_url = parsed_json['links']['next']
                 if limit == ctr:
                     break
                 ctr += 1
+            print(nodelist)
+            return nodelist
 
-    # Accesses complete list of users from API and appends list of GUIDs
-    def crawl_users(self, limit=0):
-        print("Crawling Users API")
+    def crawl_from_root(self, url):
+        self.open_links.append(url)
         with requests.Session() as s:
-            cur_url = self.api_base + 'users/'
-            ctr = 1
+            while self.open_links:
+                cur_link = self.open_links.pop(0)
+                self.closed_links.append(cur_link)
+                g = s.get(cur_link)
 
-            while True:
-                current_page = s.get(cur_url)
-                parsed_json = current_page.json()
-                for x in range(0, len(parsed_json['data'])):
-                    self.node_list.append(str(parsed_json['data'][x]['id']))
+                if g.status_code > 200:
+                    continue
 
-                cur_url = parsed_json['links']['next']
+                if cur_link not in self.url_list:
+                    self.url_list.append(cur_link)
 
-                if parsed_json['links']['next'] == parsed_json['links']['last']:
-                    break
-                if limit == ctr:
-                    break
-                ctr += 1
+                c = g.content
+                soup = BeautifulSoup(c)
+                links = soup.find_all("a")
+                for link in links:
+                    if link.has_attr('href') and link['href'] not in self.closed_links:
+                        if (url + link['href']) not in self.closed_links:
+                            if link['href'].startswith(url) and link['href'] not in self.open_links:
+                                print(link['href'])
+                                self.open_links.append(link['href'])
+                            if link['href'].startswith("/") and not link['href'].startswith("//"):
+                                if (url + link['href']) not in self.open_links:
+                                    print(link['href'])
+                                    self.open_links.append(url + link['href'])
 
-    # Accesses complete list of institutions from API and appends list of URL tails
-    def crawl_institutions(self, limit=0):
-        print("Crawling Institutions API")
+                for l in self.open_links:
+                    print(l)
+
+    def crawl_node(self, node):
+        visited = []
+        q = []
+
+        node_url = self.base_url + "/" + node
         with requests.Session() as s:
-            cur_url = self.api_base + 'institutions/'
-            ctr = 1
 
-            while True:
-                current_page = s.get(cur_url)
-                parsed_json = current_page.json()
-                for x in range(0, len(parsed_json['data'])):
-                    self.node_list.append('institutions/' + str(parsed_json['data'][x]['id']))
+            # add node root url to queue and mark it as visited
+            q.append(node_url)
+            visited.append(node_url)
 
-                cur_url = parsed_json['links']['next']
+            # while queue isn't empty:
+            while q:
 
-                if parsed_json['links']['next'] == parsed_json['links']['last']:
-                    break
-                if limit == ctr:
-                    break
-                ctr += 1
+                # pop node from queue and add to visited
+                cur_link = q.pop(0)
+                visited.append(cur_link)
 
-    # Accesses general site pages and appends the URL tails
-    def crawl_root(self):
-        print('Crawling Homepage')
-        with requests.Session() as s:
-            cur_link = self.http_base
-            g = s.get(cur_link)
+                print(cur_link)  # print link (because feedback is nice)
 
-            c = g.content
-            soup = BeautifulSoup(c, "html.parser")
-            links = soup.find_all("a", href=True)
-            for a in links:
-                link = a['href']
-                url_tail = link.replace((self.http_base), '').lstrip('//')
-                if url_tail not in self.node_list and not 'www' in url_tail and not url_tail.startswith('http'):
-                    self.node_list.append(url_tail)
+                g = s.get(cur_link, headers=self.headers)
+                if g.status_code > 200:
+                    print("Error. Moving on...")
+                    continue
+                self.save_html(g, cur_link)
 
-    def crawl(self, limit=0):
-        self.crawl_root()
-        self.crawl_nodes(limit)
-        self.crawl_users(limit)
-        self.crawl_institutions(limit)
+                # find all links in that node
+                c = g.content
+                soup = BeautifulSoup(c, 'html.parser')
+                neighbors = soup.find_all("a")
 
-c = Crawler()
-c.crawl(limit=5)
+                # make a new list of neighbors that only includes neighbors we care about
+                # (neighbors with a url that starts with "osf.io/<5 character node GUID>/")
+                neighbors_new = []
+                for link in neighbors:
+                    if link.has_attr('href'):
+                        l = link['href']
+                        if l.startswith('/' + node + '/'):
+                            l = self.base_url + l
+                        if l.startswith(self.base_url):
+                            neighbors_new.append(l.strip('/'))
 
-print(c.node_list)
+                for l in neighbors_new:
+                    if l not in visited:
+                        visited.append(l)
+                        q.append(l)
+
+    def crawl_nodes(self, nodelist):
+        for n in nodelist:
+            self.crawl_node(n)
+
+    def save_html(self, response, name):
+
+        # Remove http:// from filename
+        name = "test/" + name.split("//", 1)[1]  # second split() parameter is "maximum number of allowed splits"
+
+        if len(name.split('/')) == 2:
+            name += "/index"  # if the url is the node root, make it an index file in a node directory instead
+        print(name)  # print the file-path where the file will be momentarily saved
+        self.make_dirs(name)  # if the directories in the "name" filepath don't exist, make them
+
+        # save the file
+        f = open(name + ".html", "w")
+        f.write(response.text.encode('utf-8'))
+        f.close()
+
+    def make_dirs(self, filename):
+        folder = os.path.dirname(filename)
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+
+c = Crawler("http://osf.io")
+
+start = datetime.datetime.now()
+print("timer started: " + str(start))
+c.crawl_nodes(c.crawl_api(10))
+
+stop = datetime.datetime.now()
+time = stop-start
+print(time)
