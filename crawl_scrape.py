@@ -47,10 +47,10 @@ class Crawler():
         self.institution_url_list = []
         self.saver = save.Saver()
 
-    def call_node_api_pages(self, pages=0):
+    def call_api_pages(self, site_aspect, pages=0):
         tasks = []
         for i in range(1, pages + 1):
-            tasks.append(asyncio.ensure_future(self.call_and_parse_api_page(self.api_base + 'nodes/?page=' + str(i))))
+            tasks.append(asyncio.ensure_future(self.call_and_parse_api_page(self.api_base + site_aspect + '/?page=' + str(i))))
 
         loop = asyncio.get_event_loop()
         loop.run_until_complete(asyncio.wait(tasks))
@@ -89,7 +89,7 @@ class Crawler():
 a = datetime.datetime.now()
 
 rosie = Crawler()
-rosie.call_node_api_pages(pages=limit)
+rosie.call_api_pages('nodes', pages=limit)
 # rosie.call_
 # areas = [rosie.general_url_list, rosie.node_url_list, rosie.node_related_url_list, rosie.user_url_list, rosie.institution_url_list]
 # for area in areas:
