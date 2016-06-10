@@ -45,7 +45,6 @@ class Crawler():
         self.node_related_url_list = []
         self.user_url_list = []
         self.institution_url_list = []
-        self.saver = save.Saver()
 
     def call_api_pages(self, site_aspect, pages=0):
         tasks = []
@@ -81,7 +80,7 @@ class Crawler():
             response.close()
             print(url)
             if response.status == 200:
-                self.saver.save_html(body, url)
+                save.save_html(body, url)
                 print("crawled: ", url)
             else:
                 print ("ERROR: " + str(response.status))

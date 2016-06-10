@@ -1,25 +1,23 @@
-import os, sys
+import os
+import sys
 
-class Saver():
-    '''
-    Scrapers save render and save page content in proper directory organization.
-    '''
-    def __init__(self):
-        self.headers = {
-            # 'User-Agent': 'LinkedInBot/1.0 (compatible; Mozilla/5.0; Jakarta Commons-HttpClient/3.1 +http://www.linkedin.com)'
-            # 'User-Agent' : 'ROSIEBot/1.0 (+http://github.com/zamattiac/ROSIEBot)'
-        }
+# Contains methods for creating .html files from server responses,
+# and their respective parent directories.
 
-    def save_html(self, html, page):
-        print(page)
-        page = page.split('//', 1)[1]
-        self.make_dirs(page)
-        f = open(page + 'index.html', 'wb')
-        f.write(html)
-        f.close()
-        os.chdir(sys.path[0])
 
-    def make_dirs(self, filename):
-        folder = os.path.dirname(filename)
-        if not os.path.exists(folder):
-            os.makedirs(folder)
+# Saves an html page on a path
+def save_html(html, page):
+    print(page)
+    page = page.split('//', 1)[1]
+    make_dirs(page)
+    f = open(page + 'index.html', 'wb')
+    f.write(html)
+    f.close()
+    os.chdir(sys.path[0])
+
+
+# Makes directories for a particular file-path if they do not already exist
+def make_dirs(filename):
+    folder = os.path.dirname(filename)
+    if not os.path.exists(folder):
+        os.makedirs(folder)
