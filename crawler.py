@@ -1,9 +1,13 @@
+#! python3.5.1
+
 import asyncio
 import aiohttp
 import json
 import datetime
-import os, sys
+import os
+import sys
 import settings
+import requests
 
 # Configure for testing in settings.py
 base_urls = settings.base_urls
@@ -33,9 +37,12 @@ class Crawler:
         }
         self.http_base = base_urls[0]
         self.api_base = base_urls[1]
-
+        self.wiki_guid_list = []
+        self.wiki_url_list = []
+        self.node_list = []
         self.node_url_list = []
         self.user_url_list = []
+        self.wiki_url_list = []
         # Shoehorns index in to list of pages to scrape:
         self.institution_url_list = [self.http_base]
 
@@ -73,14 +80,48 @@ class Crawler:
             for element in data:
                 url_list.append(self.http_base + element['id'] + '/')
                 if is_node:
+                    self.node_list.append(element['id'])
                     url_list.append(self.http_base + element['id'] + '/files/')
                     url_list.append(self.http_base + element['id'] + '/registrations/')
                     url_list.append(self.http_base + element['id'] + '/forks/')
-                    url_list.append(self.http_base + element['id'] + '/analytics/')
+                    # url_list.append(self.http_base + element['id'] + '/analytics/')
 
-                    # TODO: Call to wiki crawl instead of this:
-                    url_list.append(self.http_base + element['id'] + '/wiki/')
-                    url_list.append(self.http_base + element['id'] + '/wiki/home/')
+    def wiki_crawl(self):
+        tasks = []
+        for node in self.node_list:
+            tasks.append(asyncio.ensure_future(self.get_wiki_guids(node)))
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(asyncio.wait(tasks))
+        print(self.wiki_guid_list)
+
+        tasks = []
+        for guid in self.wiki_guid_list:
+            tasks.append(asyncio.ensure_future(self.get_wiki_real_link(guid)))
+        # loop = asyncio.get_event_loop()
+        loop.run_until_complete(asyncio.wait(tasks))
+        loop.close()
+
+    async def get_wiki_guids(self, node):
+        async with aiohttp.ClientSession() as s:
+            response = await s.get(self.api_base + 'nodes/' + node + '/wikis/')
+            print("GET'd " + self.api_base + 'nodes/' + node + '/wikis/')
+            body = await response.read()
+            response.close()
+            if response.status <= 200:
+                json_body = json.loads(body.decode('utf-8'))
+                data = json_body['data']
+                for datum in data:
+                    self.wiki_guid_list.append(datum['id'])
+            else:
+                print('Status Code: ', response.status)
+
+    async def get_wiki_real_link(self, node):
+        # not quite working yet.... :( still returns GUID. need to find a way to follow a redirect in python
+        # supposedly follows redirect but evidence seems to contradict this
+        async with aiohttp.ClientSession() as s:
+            response = await s.request('get', self.http_base + node + '/')
+            print(response.url)
+            response.close()
 
     def scrape_pages(self, aspect_list):
         sem = asyncio.BoundedSemaphore(value=4)
@@ -128,15 +169,16 @@ rosie = Crawler()
 
 # Get URLs from API and add them to the async tasks
 rosie.call_api_pages('nodes', pages=1)
-rosie.call_api_pages('users', pages=1)
+rosie.wiki_crawl()
+# rosie.call_api_pages('users', pages=1)
 
 # Don't call this in localhost:
 # rosie.call_api_pages('institutions', pages=1)
 
 # Get content from URLs using async methods
-rosie.scrape_pages(rosie.node_url_list)
-rosie.scrape_pages(rosie.user_url_list)
-rosie.scrape_pages(rosie.institution_url_list)
+# rosie.scrape_pages(rosie.node_url_list)
+# rosie.scrape_pages(rosie.user_url_list)
+# rosie.scrape_pages(rosie.institution_url_list)
 
 end = datetime.datetime.now()
 print(end - start)
