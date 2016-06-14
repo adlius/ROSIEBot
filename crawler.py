@@ -7,7 +7,7 @@ import datetime
 import os
 import sys
 import settings
-import requests
+import collections
 
 # Configure for testing in settings.py
 base_urls = settings.base_urls
@@ -37,7 +37,7 @@ class Crawler:
         }
         self.http_base = base_urls[0]
         self.api_base = base_urls[1]
-        self.wiki_guid_list = []
+        self.wiki_name_list = collections.defaultdict(list)
         self.wiki_url_list = []
         self.node_list = []
         self.node_url_list = []
@@ -86,22 +86,26 @@ class Crawler:
                     url_list.append(self.http_base + element['id'] + '/forks/')
                     # url_list.append(self.http_base + element['id'] + '/analytics/')
 
+
+# what needs to change:
+                # get_wiki_real_link needs to be passed the parent node GUID and the name of the wiki
     def wiki_crawl(self):
         tasks = []
         for node in self.node_list:
-            tasks.append(asyncio.ensure_future(self.get_wiki_guids(node)))
+            tasks.append(asyncio.ensure_future(self.get_wiki_names(node)))
         loop = asyncio.get_event_loop()
         loop.run_until_complete(asyncio.wait(tasks))
-        print(self.wiki_guid_list)
+        print(self.wiki_name_list)
 
         tasks = []
-        for guid in self.wiki_guid_list:
-            tasks.append(asyncio.ensure_future(self.get_wiki_real_link(guid)))
-        # loop = asyncio.get_event_loop()
+        for parent_node in self.wiki_name_list:
+            names = self.wiki_name_list[parent_node]
+            for name in names:
+                tasks.append(asyncio.ensure_future(self.get_wiki_real_link(parent_node, name)))
         loop.run_until_complete(asyncio.wait(tasks))
         loop.close()
 
-    async def get_wiki_guids(self, node):
+    async def get_wiki_names(self, node):
         async with aiohttp.ClientSession() as s:
             response = await s.get(self.api_base + 'nodes/' + node + '/wikis/')
             print("GET'd " + self.api_base + 'nodes/' + node + '/wikis/')
@@ -111,15 +115,13 @@ class Crawler:
                 json_body = json.loads(body.decode('utf-8'))
                 data = json_body['data']
                 for datum in data:
-                    self.wiki_guid_list.append(datum['id'])
+                    self.wiki_name_list[node].append(datum['attributes']['name'])
             else:
                 print('Status Code: ', response.status)
 
-    async def get_wiki_real_link(self, node):
-        # not quite working yet.... :( still returns GUID. need to find a way to follow a redirect in python
-        # supposedly follows redirect but evidence seems to contradict this
+    async def get_wiki_real_link(self, parent_node, name):
         async with aiohttp.ClientSession() as s:
-            response = await s.request('get', self.http_base + node + '/')
+            response = await s.request('get', self.http_base + parent_node + '/wiki/' + name)
             print(response.url)
             response.close()
 
