@@ -10,6 +10,10 @@ base_urls = settings.base_urls
 limit = settings.limit
 verbose = settings.verbose
 
+# Access the last time the mirror was updated from the log
+log = open('scrapes.log', 'r').readlines()
+last_scrape = log[-1]
+
 
 class Crawler:
     """
@@ -71,6 +75,10 @@ class Crawler:
             print(api_url)
             data = json_body['data']
             for element in data:
+                print(element['attributes'])
+                # date_modified = element['attributes']['date_modified']
+                # print(element['id'])
+                # print(date_modified)
                 url_list.append(self.http_base + element['id'] + '/')
                 if is_node:
                     url_list.append(self.http_base + element['id'] + '/files/')
